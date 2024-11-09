@@ -19,7 +19,9 @@ Make sure you have [Java 21](https://www.oracle.com/java/technologies/javase/jdk
    ```sh
    gradle build
    ```
+### Config
 
+- One thing you can change is the time when people get kicked, this is in mins. EX: for 2 hours, you put 120 (60*2)
 
 ## Contributing
 We welcome contributions! Please open a pull request and il get back to you soon!
