@@ -1,0 +1,20 @@
+name: TimeLimiter
+version: '1.0-SNAPSHOT'
+main: org.jeffrey.timeLimiter.TimeLimiter
+api-version: '1.21'
+commands:
+  check:
+    description: Cheek how much time you have left for today
+    usage: /check <player>
+  settime:
+    description: Sets a players's time
+    usage: /settime <player> <time>
+    permission: timeLimiter.setTime
+
+permissions:
+  timeLimiter.setTime:
+    description: Allows you to set a players's time
+    default: op
+  timelimiter.bypasskick:
+    description: Bypass kicking players with too much time
+    default: op
