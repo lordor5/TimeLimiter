@@ -18,4 +18,3 @@ permissions:
   timelimiter.bypasskick:
     description: Bypass kicking players with too much time
     default: op
-  
