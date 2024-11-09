@@ -1,5 +1,7 @@
 # TimeLimiter
 
+![image](https://github.com/user-attachments/assets/1ee6d85e-c0be-4aa4-aae3-9ea9e7901a31)
+
 
 You know that one person who's always on the server? Yeah, we all know who we're talking about. Whether they're hogging resources or just lurking around, TimeLimiter is here to save the day. By manging access to the server bassed on playtime, everyone has the same amount of fun.
 
