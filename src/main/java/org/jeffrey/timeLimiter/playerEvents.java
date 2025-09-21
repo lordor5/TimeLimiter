@@ -18,7 +18,7 @@ import static org.bukkit.Bukkit.getServer;
 public class playerEvents implements Listener {
 
     public TimeLimiter plugin;
-    TimeTracker tTracker;
+    public TimeTracker tTracker;  // Make sure this is public
     public playerEvents(TimeLimiter plugin) {
         this.plugin=plugin;
         this.tTracker = new TimeTracker(this);
@@ -43,12 +43,13 @@ public class playerEvents implements Listener {
 
     public void kickPlayer(Player player) {
         if(!player.hasPermission("timelimiter.bypasskick")){
-            System.out.println("Kicking player");
+            plugin.getLogger().info("Kicking player: " + player.getDisplayName());
             getServer().getScheduler().scheduleSyncDelayedTask(plugin, () -> {
                 player.kickPlayer("Out of time!");
             });
+        } else {
+            plugin.getLogger().info("Player " + player.getDisplayName() + " would be kicked but has bypass permission");
         }
-
     }
 
     public int getPlayerTime(Player player) {
@@ -63,6 +64,7 @@ public class playerEvents implements Listener {
         tTracker.saveAll();
     }
     public void init(){
+        plugin.getLogger().info("Initializing TimeLimiter for online players...");
         Bukkit.getServer().getOnlinePlayers().forEach(this::onPlayerLogin);
     }
 }

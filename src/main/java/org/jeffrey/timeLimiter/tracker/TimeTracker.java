@@ -40,22 +40,24 @@ public class TimeTracker {
 
     public TimeTracker(playerEvents pEvents) {
         this.pEvents = pEvents;
-        this.userTimeMap = loadDataFromJson(DATA_FILE);
-        startGlobalTimer();
+        this.userTimeMap = new HashMap<>(); // Start with empty map
     }
 
     public void saveDataToJson() {
-        System.out.println("Saved data!");
+        pEvents.plugin.getLogger().info("Saved data!");
         Map<String, Integer> oldData = loadRawDataFromJson(DATA_FILE);
         for(Map.Entry<String, PlayerTimeTracker> entry : userTimeMap.entrySet()){
             oldData.put(entry.getKey(), entry.getValue().getTimeSpent());
         }
         writeRawDataToJson(DATA_FILE,oldData);
     }
+    
     public void saveAll(){
         for(Map.Entry<String, PlayerTimeTracker> entry : userTimeMap.entrySet()){
-            stopTimer(entry.getValue().getPlayer());
+            entry.getValue().playerStopTimer(); // Stop the timer first
         }
+        saveDataToJson(); // Then save the data
+        userTimeMap.clear(); // Clear the map
     }
 
     public void saveGlobalDataToJson(String fileName, Map<String, Map<String, PlayerTimeTracker>> userMap) {
@@ -72,26 +74,9 @@ public class TimeTracker {
         String json = gson.toJson(mainTimeMap);
         try (FileWriter writer = new FileWriter(fileName)) {
             writer.write(json);
-            System.out.println("Global time spent data saved to JSON file.");
+            pEvents.plugin.getLogger().info("Global time spent data saved to JSON file.");
         } catch (IOException e) {
-            System.err.println("An error occurred while writing to the file: " + e.getMessage());
-        }
-    }
-
-    public void startGlobalTimer(){
-        scheduler = Executors.newScheduledThreadPool(1);
-        scheduler.scheduleAtFixedRate(this::cheekTime, 0, 1, TimeUnit.HOURS);
-
-    }
-
-    public void cheekTime() {
-        int day = Calendar.getInstance().get(Calendar.DAY_OF_MONTH);
-        int month = Calendar.getInstance().get(Calendar.MONTH);
-
-        File cheek = new File("./old/"+day+"-"+month+DATA_FILE);
-        if(!cheek.exists()){
-            saveDataToJson("./old/"+day+"-"+month+DATA_FILE,userTimeMap);
-            clearJson();
+            pEvents.plugin.getLogger().severe("An error occurred while writing to the file: " + e.getMessage());
         }
     }
 
@@ -100,9 +85,9 @@ public class TimeTracker {
         String json = gson.toJson(map);
         try (FileWriter writer = new FileWriter(fileName)) {
             writer.write(json);
-            System.out.println("Time spent data saved to JSON file.");
+            pEvents.plugin.getLogger().info("Time spent data saved to JSON file.");
         } catch (IOException e) {
-            System.err.println("An error occurred while writing to the file: " + e.getMessage());
+            pEvents.plugin.getLogger().severe("An error occurred while writing to the file: " + e.getMessage());
         }
     }
 
@@ -115,13 +100,14 @@ public class TimeTracker {
         String json = gson.toJson(timeMap);
         try (FileWriter writer = new FileWriter(fileName)) {
             writer.write(json);
-            System.out.println("Time spent data saved to JSON file.");
+            pEvents.plugin.getLogger().info("Time spent data saved to JSON file.");
         } catch (IOException e) {
-            System.err.println("An error occurred while writing to the file: " + e.getMessage());
+            pEvents.plugin.getLogger().severe("An error occurred while writing to the file: " + e.getMessage());
         }
     }
+    
     public void kickPlayer(Player player){
-        System.out.println("Kicking player "+player.getDisplayName());
+        pEvents.plugin.getLogger().info("Kicking player " + player.getDisplayName());
         if(player != null){
             if(!player.isOp()){
                 pEvents.kickPlayer(player);
@@ -132,94 +118,101 @@ public class TimeTracker {
     }
 
     public void startTimer(Player player){
-        Map<String, PlayerTimeTracker> tempTimeMap = loadDataFromJson(DATA_FILE);
-        if(tempTimeMap.containsKey(player.getUniqueId().toString())){
-            userTimeMap.put(
-                    player.getUniqueId().toString(),
-                    tempTimeMap.get(player.getUniqueId().toString()));
-            if(userTimeMap.get(player.getUniqueId().toString()).getTimeSpent()>this.pEvents.plugin.getConfig().getInt("timelimit")){
-                pEvents.kickPlayer(player);
-            }
-        }else{
-            System.out.println("New player!");
-            userTimeMap.put(player.getUniqueId().toString(), new PlayerTimeTracker(player, 0, this));
-            userTimeMap.get(player.getUniqueId().toString()).playerStartTimer();
+        String playerId = player.getUniqueId().toString();
+        
+        // Stop any existing timer for this player first
+        if(userTimeMap.containsKey(playerId)){
+            userTimeMap.get(playerId).playerStopTimer();
+            userTimeMap.remove(playerId);
         }
+        
+        // Load existing time from file
+        int existingTime = loadTimeSpentFromJson(playerId);
+        
+        // Check if player should be kicked before starting timer
+        if(existingTime > this.pEvents.plugin.getConfig().getInt("timelimit")){
+            pEvents.kickPlayer(player);
+            return;
+        }
+        
+        // Create new tracker and start timer
+        PlayerTimeTracker tracker = new PlayerTimeTracker(player, existingTime, this);
+        userTimeMap.put(playerId, tracker);
+        tracker.playerStartTimer();
+        
+        pEvents.plugin.getLogger().info("Timer started for player: " + player.getDisplayName() + " with existing time: " + existingTime);
     }
-    private void clearJson(){
 
-        for(Map.Entry<String, PlayerTimeTracker> entry : userTimeMap.entrySet()){
-            entry.getValue().setPlayerTime(0);
-        }
-        saveDataToJson();
-    }
     public void stopTimer(Player player){
-        System.out.println("Trying to stop timer");
-        userTimeMap.get(player.getUniqueId().toString()).playerStopTimer();
-        saveDataToJson();
-        userTimeMap.remove(player.getUniqueId().toString());
+        String playerId = player.getUniqueId().toString();
+        pEvents.plugin.getLogger().info("Trying to stop timer for: " + player.getDisplayName());
+        
+        if(userTimeMap.containsKey(playerId)){
+            userTimeMap.get(playerId).playerStopTimer();
+            saveDataToJson();
+            userTimeMap.remove(playerId);
+            pEvents.plugin.getLogger().info("Timer stopped for: " + player.getDisplayName());
+        } else {
+            pEvents.plugin.getLogger().warning("No active timer found for: " + player.getDisplayName());
+        }
     }
 
     public int getPlayerTime(Player player){
-        if(userTimeMap.containsKey(player.getUniqueId().toString())){
-            return userTimeMap.get(player.getUniqueId().toString()).getTimeSpent();
+        String playerId = player.getUniqueId().toString();
+        if(userTimeMap.containsKey(playerId)){
+            return userTimeMap.get(playerId).getTimeSpent();
         }else{
-            return 0;
+            return loadTimeSpentFromJson(playerId);
         }
     }
 
     public boolean setPlayerTime(Player player, int time){
-        if(userTimeMap.containsKey(player.getUniqueId().toString())){
-            userTimeMap.get(player.getUniqueId().toString()).setPlayerTime(time);
+        String playerId = player.getUniqueId().toString();
+        if(userTimeMap.containsKey(playerId)){
+            // Player is online - update the active tracker
+            userTimeMap.get(playerId).setPlayerTime(time);
             return true;
         }else{
-            return false;
+            // Player is not online - update the saved data directly
+            Map<String, Integer> data = loadRawDataFromJson(DATA_FILE);
+            data.put(playerId, time);
+            writeRawDataToJson(DATA_FILE, data);
+            return true;
         }
     }
 
-    public void cheekDay(){
-
+    // New method to set time by UUID string (for offline players)
+    public boolean setPlayerTimeByUUID(String playerUUID, int time){
+        if(userTimeMap.containsKey(playerUUID)){
+            // Player is online - update the active tracker
+            userTimeMap.get(playerUUID).setPlayerTime(time);
+            return true;
+        }else{
+            // Player is not online - update the saved data directly
+            Map<String, Integer> data = loadRawDataFromJson(DATA_FILE);
+            data.put(playerUUID, time);
+            writeRawDataToJson(DATA_FILE, data);
+            pEvents.plugin.getLogger().info("Set time for offline player (UUID: " + playerUUID + ") to " + time + " minutes");
+            return true;
+        }
     }
 
-//    private void saveTimeToGlobal(){
-//        Map<Player, Integer> globalUserTimeMap = loadDataFromJson(DATA_FILE_GLOBAL);
-//        for(Map.Entry<String, Integer> entry : userTimeMap.entrySet()){
-//            if(globalUserTimeMap.containsKey(entry.getKey())){
-//                globalUserTimeMap.put(entry.getKey(), globalUserTimeMap.get(entry.getKey()) + entry.getValue());
-//            }else{
-//                globalUserTimeMap.put(entry.getKey(), entry.getValue());
-//            }
-//        }
-//        saveDataToJson(DATA_FILE_GLOBAL,globalUserTimeMap);
-//    }
+    // New method to get player time by UUID string (for offline players)
+    public int getPlayerTimeByUUID(String playerUUID){
+        if(userTimeMap.containsKey(playerUUID)){
+            return userTimeMap.get(playerUUID).getTimeSpent();
+        }else{
+            return loadTimeSpentFromJson(playerUUID);
+        }
+    }
 
     public Map<String, PlayerTimeTracker> loadDataFromJson(){
-            return loadDataFromJson(DATA_FILE);
+        return loadDataFromJson(DATA_FILE);
     }
+    
     public Map<String, PlayerTimeTracker> loadDataFromJson(String fileName) {
-        if (Files.exists(Paths.get(fileName))) {
-            Gson gson = new Gson();
-            Type mapType = new TypeToken<Map<String, Integer>>() {}.getType();
-            try (FileReader reader = new FileReader(fileName)) {
-                Map<String, Integer> data = gson.fromJson(reader, mapType);
-                Map<String, PlayerTimeTracker> playerTimeTrackerMap = new HashMap<>();
-                System.out.println("Loaded time spent data from JSON.");
-                for(Map.Entry<String, Integer> entry : data.entrySet()){
-                    Player p = Bukkit.getPlayer(UUID.fromString(entry.getKey()));
-                    if(p!=null){
-                        PlayerTimeTracker ptt = new PlayerTimeTracker(p, entry.getValue(), this);
-                        ptt.playerStartTimer();
-                        playerTimeTrackerMap.put(entry.getKey(), ptt);
-                    }
-                }
-                return playerTimeTrackerMap;
-            } catch (IOException | JsonParseException e) {
-                System.err.println("An error occurred while reading from the file: " + e.getMessage());
-            }
-        } else {
-            System.out.println("No existing timer data found. Starting fresh.");
-        }
-
+        // This method should only load data, not start timers
+        // Timers should only be started when players actually join
         return new HashMap<>();
     }
 
@@ -228,15 +221,25 @@ public class TimeTracker {
             Gson gson = new Gson();
             Type mapType = new TypeToken<Map<String, Integer>>() {}.getType();
             try (FileReader reader = new FileReader(fileName)) {
-                return gson.fromJson(reader, mapType);
+                Map<String, Integer> data = gson.fromJson(reader, mapType);
+                pEvents.plugin.getLogger().info("Loaded time spent data from JSON.");
+                return data != null ? data : new HashMap<>();
             } catch (IOException | JsonParseException e) {
-                System.err.println("An error occurred while reading from the file: " + e.getMessage());
+                pEvents.plugin.getLogger().severe("An error occurred while reading from the file: " + e.getMessage());
             }
         } else {
-            System.out.println("No existing timer data found. Starting fresh.");
+            pEvents.plugin.getLogger().info("No existing timer data found. Starting fresh.");
         }
 
         return new HashMap<>();
     }
-}
 
+    public int loadTimeSpentFromJson(String playerId) {
+        Map<String, Integer> data = loadRawDataFromJson(DATA_FILE);
+        return data.getOrDefault(playerId, 0);
+    }
+
+    public int loadTimeSpentFromJson(Player player) {
+        return loadTimeSpentFromJson(player.getUniqueId().toString());
+    }
+}
